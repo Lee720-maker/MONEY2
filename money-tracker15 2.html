@@ -1,0 +1,1668 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Money Owed Tracker</title>
+<script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+<style>
+  /* ---------- Palette ----------
+     #17252A  deep charcoal-teal — text, darkest gradient, destructive actions
+     #2B7A78  dark teal        — brand: primary buttons, total card, key figures
+     #3AAFA9  bright teal      — accents, hovers, focus rings, PAID figures
+     #DEF2F1  pale mint        — accents: table header, tag fills, preview
+     #F3FAF9  tinted white     — subtle row-hover highlight
+     #F0F2F2  neutral light    — page background
+     #FEFFFF  near-white       — card surfaces, inputs, modals
+  --------------------------------- */
+
+  * { box-sizing: border-box; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+    background: #F0F2F2;
+    margin: 0;
+    padding: 24px 20px;
+    color: #17252A;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+  .container { max-width: 900px; margin: 0 auto; }
+
+  /* ---------- Editable title ---------- */
+  .title-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 0 0 4px;
+  }
+  h1.app-title {
+    font-size: 1.65rem;
+    font-weight: 700;
+    margin: 0;
+    cursor: pointer;
+    padding: 4px 10px;
+    border-radius: 10px;
+    transition: background 0.15s;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    color: #17252A;
+    letter-spacing: -0.3px;
+  }
+  h1.app-title:hover { background: #FEFFFF; }
+  h1.app-title .pencil {
+    font-size: 0.85rem;
+    opacity: 0;
+    transition: opacity 0.15s;
+  }
+  h1.app-title:hover .pencil { opacity: 0.55; }
+  .rename-hint {
+    font-size: 0.75rem;
+    color: #2B7A78;
+    opacity: 0.7;
+    margin: 0 0 20px 10px;
+  }
+  .subtitle {
+    color: #2B7A78;
+    font-size: 0.9rem;
+    margin: 0 0 26px 10px;
+    opacity: 0.9;
+  }
+
+  /* ---------- Back link ---------- */
+  .back-link {
+    display: inline-block;
+    font-size: 0.85rem;
+    color: #2B7A78;
+    text-decoration: none;
+    padding: 4px 10px;
+    border-radius: 8px;
+    margin: 0 0 12px 10px;
+    cursor: pointer;
+    transition: background 0.15s;
+    font-weight: 600;
+  }
+  .back-link:hover { background: #FEFFFF; }
+
+  /* ---------- Total card ---------- */
+  .total-card {
+    background: linear-gradient(135deg, #17252A 0%, #2B7A78 60%, #3AAFA9 100%);
+    color: #FEFFFF;
+    border-radius: 16px;
+    padding: 32px 28px;
+    text-align: center;
+    margin-bottom: 26px;
+    box-shadow: 0 10px 30px rgba(23,37,42,0.20);
+    position: relative;
+    overflow: hidden;
+  }
+  .total-card::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(circle at top right, rgba(255,255,255,0.10), transparent 60%);
+    pointer-events: none;
+  }
+  .total-card .label {
+    font-size: 0.85rem;
+    color: #DEF2F1;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    font-weight: 600;
+    position: relative;
+  }
+  .total-card .amount {
+    font-size: 3.1rem;
+    font-weight: 700;
+    margin-top: 10px;
+    color: #FEFFFF;
+    letter-spacing: -1px;
+    position: relative;
+  }
+  .total-card .breakdown {
+    font-size: 0.85rem;
+    color: #DEF2F1;
+    opacity: 0.9;
+    margin-top: 12px;
+    position: relative;
+  }
+
+  /* ---------- Buttons ---------- */
+  .button-row {
+    display: flex;
+    gap: 14px;
+    flex-wrap: wrap;
+    margin-bottom: 18px;
+  }
+  .btn {
+    flex: 1;
+    min-width: 160px;
+    padding: 16px 20px;
+    font-size: 1rem;
+    font-weight: 600;
+    border: none;
+    border-radius: 12px;
+    cursor: pointer;
+    transition: transform 0.12s, box-shadow 0.15s, background 0.15s, color 0.15s;
+    letter-spacing: 0.2px;
+    font-family: inherit;
+  }
+  .btn:hover { transform: translateY(-1px); }
+  .btn:active { transform: translateY(0); }
+
+  .btn-lend {
+    background: #2B7A78;
+    color: #FEFFFF;
+    box-shadow: 0 4px 12px rgba(43,122,120,0.25);
+  }
+  .btn-lend:hover { background: #3AAFA9; }
+
+  .btn-pay {
+    background: #FEFFFF;
+    color: #2B7A78;
+    border: 2px solid #2B7A78;
+  }
+  .btn-pay:hover {
+    background: #2B7A78;
+    color: #FEFFFF;
+  }
+
+  .btn-save {
+    background: #3AAFA9;
+    color: #17252A;
+    box-shadow: 0 4px 12px rgba(58,175,169,0.25);
+  }
+  .btn-save:hover { background: #2B7A78; color: #FEFFFF; }
+
+  .btn-import {
+    background: #FEFFFF;
+    color: #2B7A78;
+    border: 2px solid #3AAFA9;
+  }
+  .btn-import:hover { background: #DEF2F1; }
+
+  .btn-clear {
+    background: #17252A;
+    color: #FEFFFF;
+    box-shadow: 0 4px 12px rgba(23,37,42,0.25);
+  }
+  .btn-clear:hover { background: #2B7A78; }
+
+  .btn-add {
+    background: #2B7A78;
+    color: #FEFFFF;
+    box-shadow: 0 4px 12px rgba(43,122,120,0.25);
+    width: 100%;
+    margin-bottom: 22px;
+    padding: 18px 20px;
+    font-size: 1.05rem;
+  }
+  .btn-add:hover { background: #3AAFA9; }
+
+  /* ---------- Borrower cards ---------- */
+  .borrower-list {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+  .borrower-card {
+    background: #FEFFFF;
+    border-radius: 14px;
+    padding: 18px 22px;
+    box-shadow: 0 2px 10px rgba(23,37,42,0.06);
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    cursor: pointer;
+    transition: box-shadow 0.15s, transform 0.1s;
+    border: 1px solid transparent;
+  }
+  .borrower-card:hover {
+    box-shadow: 0 6px 20px rgba(23,37,42,0.12);
+    transform: translateY(-1px);
+    border-color: #DEF2F1;
+  }
+  .borrower-card .info { flex: 1; min-width: 0; }
+  .borrower-card .name {
+    font-size: 1.15rem;
+    font-weight: 700;
+    color: #17252A;
+    letter-spacing: -0.2px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .borrower-card .meta {
+    font-size: 0.8rem;
+    color: #2B7A78;
+    margin-top: 3px;
+    opacity: 0.85;
+  }
+  .borrower-card .balance {
+    font-size: 1.3rem;
+    font-weight: 700;
+    color: #2B7A78;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+  .borrower-card .balance.zero { color: #3AAFA9; }
+  .borrower-card .card-actions {
+    display: flex;
+    gap: 4px;
+    margin-left: 6px;
+  }
+  .borrower-card .card-actions button {
+    background: none;
+    border: 1px solid transparent;
+    cursor: pointer;
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.4px;
+    padding: 4px 11px;
+    border-radius: 20px;
+    line-height: 1.4;
+    font-family: inherit;
+    transition: background 0.12s, color 0.12s, border-color 0.12s;
+  }
+  .borrower-card .card-actions .edit-b {
+    background: #DEF2F1;
+    color: #2B7A78;
+    border-color: #3AAFA9;
+  }
+  .borrower-card .card-actions .edit-b:hover {
+    background: #2B7A78;
+    color: #FEFFFF;
+  }
+  .borrower-card .card-actions .del-b {
+    background: #2B7A78;
+    color: #FEFFFF;
+    border-color: #2B7A78;
+  }
+  .borrower-card .card-actions .del-b:hover {
+    background: #17252A;
+    border-color: #17252A;
+  }
+  .empty-borrowers {
+    background: #FEFFFF;
+    border-radius: 14px;
+    padding: 36px 22px;
+    text-align: center;
+    color: #2B7A78;
+    opacity: 0.75;
+    font-size: 0.95rem;
+  }
+
+  /* ---------- Modals ---------- */
+  .modal-backdrop {
+    display: none;
+    position: fixed; inset: 0;
+    background: rgba(23,37,42,0.55);
+    z-index: 100;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+  }
+  .modal-backdrop.open { display: flex; }
+  .modal {
+    background: #FEFFFF;
+    border-radius: 16px;
+    padding: 28px;
+    width: 100%;
+    max-width: 440px;
+    box-shadow: 0 20px 50px rgba(23,37,42,0.35);
+    color: #17252A;
+  }
+  .modal h2 {
+    margin: 0 0 20px;
+    font-size: 1.2rem;
+    color: #17252A;
+    letter-spacing: -0.2px;
+  }
+  .field { margin-bottom: 16px; }
+  .field label {
+    display: block;
+    font-size: 0.85rem;
+    font-weight: 600;
+    margin-bottom: 6px;
+    color: #2B7A78;
+  }
+  .field input {
+    width: 100%;
+    padding: 12px 14px;
+    font-size: 1rem;
+    border: 1.5px solid #DEF2F1;
+    border-radius: 10px;
+    outline: none;
+    font-family: inherit;
+    background: #FEFFFF;
+    color: #17252A;
+    transition: border-color 0.15s, box-shadow 0.15s;
+  }
+  .field input:focus {
+    border-color: #3AAFA9;
+    box-shadow: 0 0 0 3px rgba(58,175,169,0.18);
+  }
+  .field .hint {
+    font-size: 0.75rem;
+    color: #2B7A78;
+    opacity: 0.7;
+    margin-top: 5px;
+  }
+  .modal-actions { display: flex; gap: 10px; margin-top: 22px; }
+  .modal-actions .btn {
+    padding: 13px;
+    font-size: 0.95rem;
+    border-radius: 10px;
+    box-shadow: none;
+  }
+  .btn-cancel {
+    background: #DEF2F1;
+    color: #17252A;
+  }
+  .btn-cancel:hover { background: #c9e6e4; transform: none; }
+
+  /* ---------- Import dialog extras ---------- */
+  .import-options {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin: 16px 0;
+  }
+  .import-option {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 14px;
+    border: 1.5px solid #DEF2F1;
+    border-radius: 10px;
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s;
+    background: #FEFFFF;
+  }
+  .import-option:hover { border-color: #3AAFA9; background: #DEF2F1; }
+  .import-option input { margin-top: 3px; accent-color: #2B7A78; }
+  .import-option .opt-title { font-weight: 600; font-size: 0.95rem; color: #17252A; }
+  .import-option .opt-desc { font-size: 0.8rem; color: #2B7A78; margin-top: 3px; opacity: 0.85; }
+  .file-input { display: none; }
+  .import-preview {
+    background: #DEF2F1;
+    border: 1px solid #c9e6e4;
+    border-radius: 10px;
+    padding: 12px;
+    font-size: 0.85rem;
+    margin: 12px 0;
+    max-height: 140px;
+    overflow-y: auto;
+    color: #17252A;
+  }
+  .import-preview .row {
+    padding: 5px 0;
+    border-bottom: 1px solid rgba(43,122,120,0.15);
+  }
+  .import-preview .row:last-child { border-bottom: none; }
+  .import-preview .ok { color: #2B7A78; font-weight: 600; }
+  .import-preview .bad { color: #17252A; font-weight: 600; }
+
+  /* ---------- History table ---------- */
+  .history {
+    background: #FEFFFF;
+    border-radius: 16px;
+    padding: 22px;
+    box-shadow: 0 4px 16px rgba(23,37,42,0.06);
+    overflow-x: auto;
+  }
+  .history h2 {
+    margin: 0 0 16px;
+    font-size: 1.1rem;
+    color: #17252A;
+    letter-spacing: -0.2px;
+  }
+
+  table {
+    width: 100%;
+    min-width: 680px;
+    border-collapse: separate;
+    border-spacing: 0;
+    table-layout: fixed;
+    font-size: 0.9rem;
+  }
+
+  col.col-date    { width: 10%; }
+  col.col-type    { width: 10%; }
+  col.col-desc    { width: 30%; }
+  col.col-amount  { width: 14%; }
+  col.col-balance { width: 16%; }
+  col.col-actions { width: 20%; }
+
+  th, td {
+    padding: 14px 12px;
+    text-align: left;
+    vertical-align: middle;
+    border-bottom: 1px solid #DEF2F1;
+    color: #17252A;
+  }
+  th {
+    color: #2B7A78;
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    font-weight: 700;
+    white-space: nowrap;
+    background: #DEF2F1;
+  }
+  th:first-child { border-top-left-radius: 10px; }
+  th:last-child  { border-top-right-radius: 10px; }
+
+  tbody tr { transition: background 0.1s; }
+  tbody tr:hover { background: #F3FAF9; }
+  tbody tr:last-child td { border-bottom: none; }
+
+  td.date-col,
+  td.type-col,
+  td.num,
+  td.actions-col { white-space: nowrap; }
+
+  th.num,
+  td.num {
+    text-align: left;
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum";
+  }
+
+  th.actions-head { text-align: center; }
+  td.actions-col  { text-align: right; }
+
+  td.desc-col,
+  th.desc-head {
+    padding-right: 28px;
+  }
+  td.desc-col {
+    vertical-align: middle;
+    overflow: hidden;
+  }
+  td.desc-col .desc-inner {
+    display: block;
+    line-height: 1.4;
+    max-height: calc(1.4em * 2);
+    overflow: hidden;
+    word-break: break-word;
+    overflow-wrap: anywhere;
+  }
+  td.desc-col.truncated { cursor: help; }
+
+  /* Reference line: small, muted, one line only */
+  .ref-line {
+    display: block;
+    margin-top: 3px;
+    font-size: 0.72rem;
+    color: #2B7A78;
+    opacity: 0.75;
+    line-height: 1.3;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    letter-spacing: 0.2px;
+  }
+  .ref-line .ref-label {
+    font-weight: 700;
+    opacity: 0.9;
+  }
+
+  td.num.amount-col,
+  th.num.amount-head {
+    padding-left: 20px;
+  }
+
+  td.num.balance-col,
+  th.num.balance-head {
+    padding-left: 20px;
+    padding-right: 24px;
+  }
+
+  /* ---------- Tags — identical box metrics across both ---------- */
+  .tag,
+  .action-btn {
+    display: inline-block;
+    box-sizing: border-box;
+    padding: 4px 11px;
+    border-radius: 20px;
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.4px;
+    line-height: 1.4;
+    border: 1px solid transparent;
+  }
+
+  .tag-lend {
+    background: #2B7A78;
+    color: #FEFFFF;
+    border-color: #2B7A78;
+  }
+
+  .tag-pay {
+    background: #DEF2F1;
+    color: #2B7A78;
+    border-color: #3AAFA9;
+  }
+
+  .empty {
+    text-align: center;
+    color: #2B7A78;
+    opacity: 0.7;
+    padding: 28px;
+    font-size: 0.9rem;
+    white-space: normal;
+  }
+
+  .action-btn {
+    cursor: pointer;
+    margin-left: 4px;
+    font-family: inherit;
+    transition: background 0.12s, color 0.12s, border-color 0.12s;
+  }
+  .edit-btn {
+    background: #DEF2F1;
+    color: #2B7A78;
+    border-color: #3AAFA9;
+  }
+  .edit-btn:hover {
+    background: #2B7A78;
+    color: #FEFFFF;
+    border-color: #2B7A78;
+  }
+  .del-btn {
+    background: #2B7A78;
+    color: #FEFFFF;
+    border-color: #2B7A78;
+  }
+  .del-btn:hover {
+    background: #17252A;
+    border-color: #17252A;
+  }
+
+  .row-lend td.num { color: #2B7A78; font-weight: 600; }
+  .row-pay  td.num { color: #3AAFA9; font-weight: 600; }
+
+  .edit-type-badge {
+    display: inline-block;
+    box-sizing: border-box;
+    padding: 5px 14px;
+    border-radius: 20px;
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.4px;
+    line-height: 1.4;
+    border: 1px solid transparent;
+    margin-bottom: 16px;
+  }
+
+  /* ---------- Page switching ---------- */
+  .page { display: none; }
+  .page.active { display: block; }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <!-- ================= PAGE 1: BORROWERS LIST ================= -->
+  <div id="page1" class="page active">
+    <div class="title-row">
+      <h1 class="app-title" id="appTitle" onclick="openRename()" title="Click to rename">
+        <span id="appTitleText">Money Owed Tracker</span>
+        <span class="pencil">✏️</span>
+      </h1>
+    </div>
+    <div class="rename-hint">Click the title to rename</div>
+    <div class="subtitle">Manage your borrowers and their outstanding balances.</div>
+
+    <button class="btn btn-add" onclick="openAddBorrower()">+ Add Borrower</button>
+
+    <div class="borrower-list" id="borrowerList"></div>
+  </div>
+
+  <!-- ================= PAGE 2: BORROWER DETAIL ================= -->
+  <div id="page2" class="page">
+    <a class="back-link" onclick="showPage(1)">← All Borrowers</a>
+    <div class="title-row">
+      <h1 class="app-title" id="borrowerTitle">
+        <span id="borrowerTitleText">Borrower</span>
+      </h1>
+    </div>
+    <div class="subtitle">Track money you've lent and payments received.</div>
+
+    <div class="total-card">
+      <div class="label">Currently Owed To You</div>
+      <div class="amount" id="totalDisplay">£0.00</div>
+      <div class="breakdown" id="breakdownDisplay">Opening: £0.00 &nbsp;•&nbsp; Repaid: £0.00</div>
+    </div>
+
+    <div class="button-row">
+      <button class="btn btn-lend" onclick="openModal('lend')">+ LEND</button>
+      <button class="btn btn-pay" onclick="openModal('pay')">− PAYMENTS MADE</button>
+    </div>
+    <div class="button-row">
+      <button class="btn btn-save" onclick="exportExcel()">Save / Update Excel File</button>
+      <button class="btn btn-import" onclick="openImport()">Import from Excel</button>
+      <button class="btn btn-clear" onclick="clearAll()">Clear All Data</button>
+    </div>
+
+    <div class="history">
+      <h2>Transaction History</h2>
+      <table>
+        <colgroup>
+          <col class="col-date">
+          <col class="col-type">
+          <col class="col-desc">
+          <col class="col-amount">
+          <col class="col-balance">
+          <col class="col-actions">
+        </colgroup>
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th>Type</th>
+            <th class="desc-head">Description</th>
+            <th class="num amount-head">Amount</th>
+            <th class="num balance-head">Balance After</th>
+            <th class="actions-head">Actions</th>
+          </tr>
+        </thead>
+        <tbody id="historyBody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ================= ADD BORROWER MODAL ================= -->
+<div class="modal-backdrop" id="modal-addborrower">
+  <div class="modal">
+    <h2>Add Borrower</h2>
+    <div class="field">
+      <label>Borrower Name</label>
+      <input type="text" id="ab-name" placeholder="e.g. Tom Smith" maxlength="60" autocomplete="off">
+    </div>
+    <div class="field">
+      <label>Opening Amount Borrowed (£)</label>
+      <input type="text" id="ab-amount" placeholder="0.00" inputmode="decimal" autocomplete="off">
+      <div class="hint">The amount they currently owe you at the point of creation.</div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-cancel" onclick="closeModal('addborrower')">Cancel</button>
+      <button class="btn btn-lend" onclick="submitAddBorrower()">Add</button>
+    </div>
+  </div>
+</div>
+
+<!-- ================= EDIT BORROWER MODAL ================= -->
+<div class="modal-backdrop" id="modal-editborrower">
+  <div class="modal">
+    <h2>Edit Borrower</h2>
+    <div class="field">
+      <label>Borrower Name</label>
+      <input type="text" id="eb-name" placeholder="Borrower name" maxlength="60" autocomplete="off">
+    </div>
+    <div class="field">
+      <label>Opening Amount Borrowed (£)</label>
+      <input type="text" id="eb-amount" placeholder="0.00" inputmode="decimal" autocomplete="off">
+      <div class="hint">Changing this recalculates the current balance.</div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-cancel" onclick="closeModal('editborrower')">Cancel</button>
+      <button class="btn btn-save" onclick="submitEditBorrower()">Save Changes</button>
+    </div>
+  </div>
+</div>
+
+<!-- ================= LEND MODAL ================= -->
+<div class="modal-backdrop" id="modal-lend">
+  <div class="modal">
+    <h2>Record Money Lent</h2>
+    <div class="field">
+      <label>Date</label>
+      <input type="text" id="lend-date" placeholder="dd/mm/yyyy" autocomplete="off">
+      <div class="hint">UK format: dd/mm/yyyy</div>
+    </div>
+    <div class="field">
+      <label>Description</label>
+      <input type="text" id="lend-desc" placeholder="What was the money for?" autocomplete="off">
+    </div>
+    <div class="field">
+      <label>Total Borrowed (£)</label>
+      <input type="text" id="lend-amount" placeholder="0.00" inputmode="decimal" autocomplete="off">
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-cancel" onclick="closeModal('lend')">Cancel</button>
+      <button class="btn btn-lend" onclick="submitLend()">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- ================= PAYMENTS MODAL ================= -->
+<div class="modal-backdrop" id="modal-pay">
+  <div class="modal">
+    <h2>Record Payment Received</h2>
+    <div class="field">
+      <label>Date</label>
+      <input type="text" id="pay-date" placeholder="dd/mm/yyyy" autocomplete="off">
+      <div class="hint">UK format: dd/mm/yyyy</div>
+    </div>
+    <div class="field">
+      <label>Description</label>
+      <input type="text" id="pay-desc" placeholder="What was this payment for?" autocomplete="off">
+    </div>
+    <div class="field">
+      <label>Amount Repaid (£)</label>
+      <input type="text" id="pay-amount" placeholder="0.00" inputmode="decimal" autocomplete="off">
+    </div>
+    <div class="field">
+      <label>Reference <span style="font-weight:400;opacity:0.7">(optional)</span></label>
+      <input type="text" id="pay-ref" placeholder="Bank reference e.g. TFR-2026-11-12" autocomplete="off" maxlength="80">
+      <div class="hint">Typically the reference number the bank gives the transfer. May include letters.</div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-cancel" onclick="closeModal('pay')">Cancel</button>
+      <button class="btn btn-lend" onclick="submitPay()">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- ================= EDIT TRANSACTION MODAL ================= -->
+<div class="modal-backdrop" id="modal-edit">
+  <div class="modal">
+    <h2>Edit Transaction</h2>
+    <div id="edit-type-badge" class="edit-type-badge"></div>
+    <div class="field">
+      <label>Date</label>
+      <input type="text" id="edit-date" placeholder="dd/mm/yyyy" autocomplete="off">
+      <div class="hint">UK format: dd/mm/yyyy</div>
+    </div>
+    <div class="field">
+      <label>Description</label>
+      <input type="text" id="edit-desc" placeholder="What was the money for?" autocomplete="off">
+    </div>
+    <div class="field">
+      <label id="edit-amount-label">Amount (£)</label>
+      <input type="text" id="edit-amount" placeholder="0.00" inputmode="decimal" autocomplete="off">
+    </div>
+    <div class="field" id="edit-ref-field" style="display:none">
+      <label>Reference <span style="font-weight:400;opacity:0.7">(optional)</span></label>
+      <input type="text" id="edit-ref" placeholder="Bank reference" autocomplete="off" maxlength="80">
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-cancel" onclick="closeModal('edit')">Cancel</button>
+      <button class="btn btn-save" onclick="submitEdit()">Save Changes</button>
+    </div>
+  </div>
+</div>
+
+<!-- ================= RENAME MODAL ================= -->
+<div class="modal-backdrop" id="modal-rename">
+  <div class="modal">
+    <h2>Rename App</h2>
+    <div class="field">
+      <label>App Name</label>
+      <input type="text" id="rename-input" placeholder="e.g. Family Loans" maxlength="60" autocomplete="off">
+      <div class="hint">Up to 60 characters. Appears at the top of the borrowers page.</div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-cancel" onclick="closeModal('rename')">Cancel</button>
+      <button class="btn btn-save" onclick="submitRename()">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- ================= IMPORT MODAL ================= -->
+<div class="modal-backdrop" id="modal-import">
+  <div class="modal" style="max-width:520px">
+    <h2>Import from Excel</h2>
+    <p style="font-size:0.88rem;color:#2B7A78;margin:0 0 12px;opacity:0.9">
+      Select an .xlsx file previously exported by this app (or a sheet from it), with columns:
+      <strong style="color:#17252A">Date</strong>, <strong style="color:#17252A">Type</strong>, <strong style="color:#17252A">Description</strong>, <strong style="color:#17252A">Amount (£)</strong>. A <strong style="color:#17252A">Reference</strong> column is optional.
+    </p>
+    <div class="import-options">
+      <label class="import-option">
+        <input type="radio" name="importMode" value="replace" checked>
+        <div>
+          <div class="opt-title">Replace this borrower's transactions</div>
+          <div class="opt-desc">Clears this borrower's current records, then loads everything from the file.</div>
+        </div>
+      </label>
+      <label class="import-option">
+        <input type="radio" name="importMode" value="merge">
+        <div>
+          <div class="opt-title">Merge with current records</div>
+          <div class="opt-desc">Keeps existing records and adds the file's records. Exact duplicates are skipped.</div>
+        </div>
+      </label>
+    </div>
+    <div class="field" id="importSheetField" style="display:none">
+      <label>Sheet (only shown for multi-sheet files)</label>
+      <input type="text" id="importSheet" placeholder="" autocomplete="off">
+      <div class="hint">Not editable — this is the first sheet in the file.</div>
+    </div>
+    <input type="file" class="file-input" id="importFile" accept=".xlsx,.xls,.csv">
+    <button class="btn btn-import" style="width:100%" onclick="document.getElementById('importFile').click()">
+      Choose File…
+    </button>
+    <div id="importPreview"></div>
+    <div class="modal-actions">
+      <button class="btn btn-cancel" onclick="closeModal('import')">Cancel</button>
+      <button class="btn btn-save" id="confirmImportBtn" onclick="confirmImport()" disabled>Import</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ============================================================
+   DATA MODEL
+   ============================================================
+   app = {
+     title: string,
+     borrowers: [
+       { id, name, openingAmount, transactions: [
+           { id, type, date, description, amount, reference }
+         ]
+       }
+     ]
+   }
+   The `reference` field is only used for type === 'pay' rows and is optional.
+   ============================================================ */
+
+const STORAGE_KEY = 'moneyOwedTracker.v2';
+const LEGACY_STORAGE_KEY = 'moneyOwedTracker.v1';
+const LEGACY_TITLE_KEY = 'moneyOwedTracker.title';
+const DEFAULT_TITLE = 'Money Owed Tracker';
+
+let app = {
+  title: DEFAULT_TITLE,
+  borrowers: []
+};
+let currentBorrowerId = null;
+let pendingImport = null;
+let editingId = null;
+let editingBorrowerId = null;
+
+/* ---------- Load / Save ---------- */
+function loadApp() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed && Array.isArray(parsed.borrowers)) {
+        app.title = parsed.title && parsed.title.trim() ? parsed.title : DEFAULT_TITLE;
+        app.borrowers = parsed.borrowers.map(b => ({
+          ...b,
+          transactions: (b.transactions || []).map(t => ({
+            ...t,
+            reference: t.reference || ''
+          }))
+        }));
+        return;
+      }
+    }
+  } catch (e) { /* fall through to migration */ }
+
+  try {
+    const legacyRaw = localStorage.getItem(LEGACY_STORAGE_KEY);
+    if (legacyRaw) {
+      const legacyTx = JSON.parse(legacyRaw) || [];
+      const legacyTitle = localStorage.getItem(LEGACY_TITLE_KEY) || DEFAULT_TITLE;
+      if (Array.isArray(legacyTx) && legacyTx.length > 0) {
+        app.title = legacyTitle;
+        app.borrowers = [{
+          id: Date.now(),
+          name: 'Default Borrower',
+          openingAmount: 0,
+          transactions: legacyTx.map(t => ({
+            id: t.id || Date.now() + Math.random(),
+            type: t.type,
+            date: t.date,
+            description: t.description,
+            amount: t.amount,
+            reference: ''
+          }))
+        }];
+        saveApp();
+        return;
+      }
+    }
+  } catch (e) { /* ignore */ }
+
+  app.title = DEFAULT_TITLE;
+  app.borrowers = [];
+}
+function saveApp() {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(app));
+}
+function getCurrentBorrower() {
+  return app.borrowers.find(b => b.id === currentBorrowerId) || null;
+}
+
+/* ---------- Helpers ---------- */
+function money(n) {
+  return '£' + Number(n).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+function parseAmount(str) {
+  if (typeof str === 'number') {
+    return isFinite(str) && str !== 0 ? Math.round(Math.abs(str) * 100) / 100 : NaN;
+  }
+  const cleaned = String(str).replace(/[£,\s]/g, '');
+  const num = Number(cleaned);
+  return isFinite(num) && num !== 0 ? Math.round(Math.abs(num) * 100) / 100 : NaN;
+}
+function parsePositiveOrZero(str) {
+  if (typeof str === 'number') {
+    return isFinite(str) && str >= 0 ? Math.round(str * 100) / 100 : NaN;
+  }
+  const cleaned = String(str).replace(/[£,\s]/g, '');
+  if (cleaned === '') return NaN;
+  const num = Number(cleaned);
+  return isFinite(num) && num >= 0 ? Math.round(num * 100) / 100 : NaN;
+}
+function validateDate(str) {
+  const m = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(String(str).trim());
+  if (!m) return false;
+  const d = +m[1], mo = +m[2], y = +m[3];
+  if (mo < 1 || mo > 12 || d < 1 || d > 31) return false;
+  const dt = new Date(y, mo - 1, d);
+  return dt.getFullYear() === y && dt.getMonth() === mo - 1 && dt.getDate() === d;
+}
+function dateToISO(ddmmyyyy) {
+  const m = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(String(ddmmyyyy).trim());
+  return m ? `${m[3]}-${m[2]}-${m[1]}` : '';
+}
+function normaliseDate(val) {
+  if (val instanceof Date && !isNaN(val)) {
+    const d = String(val.getDate()).padStart(2,'0');
+    const m = String(val.getMonth()+1).padStart(2,'0');
+    return `${d}/${m}/${val.getFullYear()}`;
+  }
+  const s = String(val).trim();
+  let m = /^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{4})$/.exec(s);
+  if (m) {
+    const dd = m[1].padStart(2,'0'), mm = m[2].padStart(2,'0'), yy = m[3];
+    const candidate = `${dd}/${mm}/${yy}`;
+    return validateDate(candidate) ? candidate : null;
+  }
+  m = /^(\d{4})-(\d{2})-(\d{2})/.exec(s);
+  if (m) {
+    const candidate = `${m[3]}/${m[2]}/${m[1]}`;
+    return validateDate(candidate) ? candidate : null;
+  }
+  return null;
+}
+function normaliseType(val) {
+  const s = String(val).trim().toLowerCase();
+  if (s.startsWith('lent') || s === 'lend' || s === 'loan' || s === 'borrowed') return 'lend';
+  if (s.startsWith('pay') || s === 'paid' || s === 'repay' || s === 'repayment' || s === 'received') return 'pay';
+  return null;
+}
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+function sheetNameFor(name) {
+  let s = String(name).replace(/[:\\\/\?\*\[\]]/g, '_');
+  if (s.length > 31) s = s.slice(0, 31);
+  return s || 'Borrower';
+}
+function borrowerBalance(b) {
+  const lent = b.transactions.filter(t => t.type === 'lend').reduce((s, t) => s + t.amount, 0);
+  const repaid = b.transactions.filter(t => t.type === 'pay').reduce((s, t) => s + t.amount, 0);
+  return Math.round(((b.openingAmount || 0) + lent - repaid) * 100) / 100;
+}
+
+/* ---------- Page switching ---------- */
+function showPage(n) {
+  document.getElementById('page1').classList.toggle('active', n === 1);
+  document.getElementById('page2').classList.toggle('active', n === 2);
+  window.scrollTo(0, 0);
+  if (n === 1) {
+    currentBorrowerId = null;
+    renderBorrowerList();
+  }
+}
+
+/* ---------- Render: page 1 ---------- */
+function renderBorrowerList() {
+  document.getElementById('appTitleText').textContent = app.title;
+  document.title = app.title;
+
+  const list = document.getElementById('borrowerList');
+  list.innerHTML = '';
+
+  if (app.borrowers.length === 0) {
+    list.innerHTML = '<div class="empty-borrowers">No borrowers yet. Click “+ Add Borrower” to get started.</div>';
+    return;
+  }
+
+  app.borrowers.forEach(b => {
+    const bal = borrowerBalance(b);
+    const card = document.createElement('div');
+    card.className = 'borrower-card';
+    card.onclick = (e) => {
+      if (e.target.closest('.card-actions')) return;
+      openBorrower(b.id);
+    };
+    card.innerHTML = `
+      <div class="info">
+        <div class="name">${escapeHtml(b.name)}</div>
+        <div class="meta">${b.transactions.length} transaction${b.transactions.length === 1 ? '' : 's'} &nbsp;•&nbsp; Opening: ${money(b.openingAmount || 0)}</div>
+      </div>
+      <div class="balance ${bal === 0 ? 'zero' : ''}">${money(bal)}</div>
+      <div class="card-actions">
+        <button class="edit-b" onclick="openEditBorrower(${b.id})">EDIT</button>
+        <button class="del-b" onclick="deleteBorrower(${b.id})">DELETE</button>
+      </div>
+    `;
+    list.appendChild(card);
+  });
+}
+
+/* ---------- Open borrower (page 2) ---------- */
+function openBorrower(id) {
+  const b = app.borrowers.find(x => x.id === id);
+  if (!b) return;
+  currentBorrowerId = id;
+  document.getElementById('borrowerTitleText').textContent = b.name;
+  document.title = b.name + ' — ' + app.title;
+  renderBorrowerDetail();
+  showPage(2);
+}
+
+/* ---------- Render: page 2 ---------- */
+function renderBorrowerDetail() {
+  const b = getCurrentBorrower();
+  if (!b) { showPage(1); return; }
+
+  const lent = b.transactions.filter(t => t.type === 'lend').reduce((s, t) => s + t.amount, 0);
+  const repaid = b.transactions.filter(t => t.type === 'pay').reduce((s, t) => s + t.amount, 0);
+  const owed = borrowerBalance(b);
+
+  document.getElementById('totalDisplay').textContent = money(owed);
+  document.getElementById('breakdownDisplay').textContent =
+    `Opening: ${money(b.openingAmount || 0)}  •  Extra Lent: ${money(lent)}  •  Repaid: ${money(repaid)}`;
+
+  const tbody = document.getElementById('historyBody');
+  tbody.innerHTML = '';
+
+  if (b.transactions.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="6" class="empty">No transactions yet. Click LEND to start.</td></tr>';
+    return;
+  }
+
+  let running = b.openingAmount || 0;
+  const sorted = [...b.transactions].sort((x, y) => {
+    const dx = dateToISO(x.date), dy = dateToISO(y.date);
+    if (dx !== dy) return dx < dy ? -1 : 1;
+    return x.id - y.id;
+  });
+
+  sorted.forEach(t => {
+    running += (t.type === 'lend' ? t.amount : -t.amount);
+    const ref = (t.type === 'pay' && t.reference) ? String(t.reference).trim() : '';
+    const refHtml = ref
+      ? `<span class="ref-line" title="Reference: ${escapeHtml(ref)}"><span class="ref-label">Ref:</span> ${escapeHtml(ref)}</span>`
+      : '';
+    const tr = document.createElement('tr');
+    tr.className = t.type === 'lend' ? 'row-lend' : 'row-pay';
+    tr.innerHTML = `
+      <td class="date-col">${t.date}</td>
+      <td class="type-col"><span class="tag ${t.type === 'lend' ? 'tag-lend' : 'tag-pay'}">${t.type === 'lend' ? 'LENT' : 'PAID'}</span></td>
+      <td class="desc-col"><span class="desc-inner">${escapeHtml(t.description)}${refHtml}</span></td>
+      <td class="num amount-col">${t.type === 'lend' ? '+' : '−'}${money(t.amount)}</td>
+      <td class="num balance-col">${money(running)}</td>
+      <td class="actions-col">
+        <button class="action-btn edit-btn" onclick="openEdit(${t.id})">EDIT</button>
+        <button class="action-btn del-btn" onclick="deleteTx(${t.id})">DELETE</button>
+      </td>
+    `;
+    tbody.appendChild(tr);
+  });
+
+  requestAnimationFrame(() => {
+    tbody.querySelectorAll('td.desc-col').forEach(cell => {
+      const inner = cell.querySelector('.desc-inner');
+      if (!inner) return;
+      // Measure the description line only — use the first child (text/span line)
+      const overflow = inner.scrollHeight > inner.clientHeight + 1;
+      if (overflow) {
+        cell.classList.add('truncated');
+        cell.title = inner.textContent;
+      }
+    });
+  });
+}
+
+/* ---------- Title / Rename ---------- */
+function openRename() {
+  document.getElementById('rename-input').value = app.title;
+  document.getElementById('modal-rename').classList.add('open');
+  setTimeout(() => {
+    const inp = document.getElementById('rename-input');
+    inp.focus();
+    inp.select();
+  }, 50);
+}
+function submitRename() {
+  const name = document.getElementById('rename-input').value.trim();
+  if (!name) return alert('Please enter a name for the app.');
+  app.title = name;
+  saveApp();
+  renderBorrowerList();
+  closeModal('rename');
+}
+
+/* ---------- Add Borrower ---------- */
+function openAddBorrower() {
+  document.getElementById('ab-name').value = '';
+  document.getElementById('ab-amount').value = '';
+  document.getElementById('modal-addborrower').classList.add('open');
+  setTimeout(() => document.getElementById('ab-name').focus(), 50);
+}
+function submitAddBorrower() {
+  const name = document.getElementById('ab-name').value.trim();
+  const amtRaw = document.getElementById('ab-amount').value.trim();
+  if (!name) return alert('Please enter the borrower\'s name.');
+  const amount = amtRaw === '' ? 0 : parsePositiveOrZero(amtRaw);
+  if (isNaN(amount)) return alert('Please enter a valid opening amount (e.g. 500 or 500.00). Use 0 if none.');
+
+  app.borrowers.push({
+    id: Date.now(),
+    name,
+    openingAmount: amount,
+    transactions: []
+  });
+  saveApp();
+  renderBorrowerList();
+  closeModal('addborrower');
+}
+
+/* ---------- Edit Borrower ---------- */
+function openEditBorrower(id) {
+  const b = app.borrowers.find(x => x.id === id);
+  if (!b) return;
+  editingBorrowerId = id;
+  document.getElementById('eb-name').value = b.name;
+  document.getElementById('eb-amount').value = (b.openingAmount || 0).toFixed(2);
+  document.getElementById('modal-editborrower').classList.add('open');
+  setTimeout(() => document.getElementById('eb-name').focus(), 50);
+}
+function submitEditBorrower() {
+  const b = app.borrowers.find(x => x.id === editingBorrowerId);
+  if (!b) return;
+  const name = document.getElementById('eb-name').value.trim();
+  const amtRaw = document.getElementById('eb-amount').value.trim();
+  if (!name) return alert('Please enter the borrower\'s name.');
+  const amount = amtRaw === '' ? 0 : parsePositiveOrZero(amtRaw);
+  if (isNaN(amount)) return alert('Please enter a valid opening amount (e.g. 500 or 500.00). Use 0 if none.');
+  b.name = name;
+  b.openingAmount = amount;
+  saveApp();
+  renderBorrowerList();
+  if (currentBorrowerId === b.id) {
+    document.getElementById('borrowerTitleText').textContent = b.name;
+    renderBorrowerDetail();
+  }
+  closeModal('editborrower');
+  editingBorrowerId = null;
+}
+
+/* ---------- Delete Borrower ---------- */
+function deleteBorrower(id) {
+  const b = app.borrowers.find(x => x.id === id);
+  if (!b) return;
+  const n = b.transactions.length;
+  if (!confirm(`Delete "${b.name}"?\n\nThis will permanently remove the borrower and ${n} transaction${n === 1 ? '' : 's'}.`)) return;
+  if (!confirm('This cannot be undone. Really delete?')) return;
+  app.borrowers = app.borrowers.filter(x => x.id !== id);
+  if (currentBorrowerId === id) { currentBorrowerId = null; showPage(1); }
+  saveApp();
+  renderBorrowerList();
+}
+
+/* ---------- Modal control ---------- */
+function openModal(which) {
+  document.getElementById('modal-' + which).classList.add('open');
+  const dateInput = document.getElementById(which + '-date');
+  if (dateInput) {
+    const now = new Date();
+    dateInput.value = String(now.getDate()).padStart(2,'0') + '/' +
+                      String(now.getMonth()+1).padStart(2,'0') + '/' +
+                      now.getFullYear();
+    setTimeout(() => dateInput.focus(), 50);
+  }
+}
+function closeModal(which) {
+  document.getElementById('modal-' + which).classList.remove('open');
+  if (which === 'lend' || which === 'pay') {
+    ['date','desc','amount','ref'].forEach(f => {
+      const el = document.getElementById(which + '-' + f);
+      if (el) el.value = '';
+    });
+  }
+  if (which === 'edit') {
+    editingId = null;
+    document.getElementById('edit-date').value = '';
+    document.getElementById('edit-desc').value = '';
+    document.getElementById('edit-amount').value = '';
+    document.getElementById('edit-ref').value = '';
+    document.getElementById('edit-ref-field').style.display = 'none';
+  }
+  if (which === 'rename') {
+    document.getElementById('rename-input').value = '';
+  }
+  if (which === 'addborrower') {
+    document.getElementById('ab-name').value = '';
+    document.getElementById('ab-amount').value = '';
+  }
+  if (which === 'editborrower') {
+    editingBorrowerId = null;
+    document.getElementById('eb-name').value = '';
+    document.getElementById('eb-amount').value = '';
+  }
+  if (which === 'import') {
+    pendingImport = null;
+    document.getElementById('importFile').value = '';
+    document.getElementById('importPreview').innerHTML = '';
+    document.getElementById('importSheetField').style.display = 'none';
+    document.getElementById('confirmImportBtn').disabled = true;
+  }
+}
+
+/* ---------- LEND / PAYMENT submissions ---------- */
+function submitLend() {
+  const b = getCurrentBorrower();
+  if (!b) return;
+  const date = document.getElementById('lend-date').value.trim();
+  const desc = document.getElementById('lend-desc').value.trim();
+  const amtRaw = document.getElementById('lend-amount').value;
+  if (!validateDate(date)) return alert('Please enter a valid date in dd/mm/yyyy format.');
+  if (!desc) return alert('Please enter a description.');
+  const amount = parseAmount(amtRaw);
+  if (isNaN(amount)) return alert('Please enter a valid amount greater than 0 (e.g. 25.50).');
+  b.transactions.push({ id: Date.now(), type: 'lend', date, description: desc, amount, reference: '' });
+  saveApp();
+  renderBorrowerDetail();
+  closeModal('lend');
+}
+function submitPay() {
+  const b = getCurrentBorrower();
+  if (!b) return;
+  const date = document.getElementById('pay-date').value.trim();
+  const desc = document.getElementById('pay-desc').value.trim();
+  const amtRaw = document.getElementById('pay-amount').value;
+  const ref = document.getElementById('pay-ref').value.trim();
+  if (!validateDate(date)) return alert('Please enter a valid date in dd/mm/yyyy format.');
+  if (!desc) return alert('Please enter a description.');
+  const amount = parseAmount(amtRaw);
+  if (isNaN(amount)) return alert('Please enter a valid amount greater than 0 (e.g. 25.50).');
+  b.transactions.push({ id: Date.now(), type: 'pay', date, description: desc, amount, reference: ref });
+  saveApp();
+  renderBorrowerDetail();
+  closeModal('pay');
+}
+
+/* ---------- Edit transaction ---------- */
+function openEdit(id) {
+  const b = getCurrentBorrower();
+  if (!b) return;
+  const tx = b.transactions.find(t => t.id === id);
+  if (!tx) return;
+  editingId = id;
+  document.getElementById('edit-date').value = tx.date;
+  document.getElementById('edit-desc').value = tx.description;
+  document.getElementById('edit-amount').value = tx.amount.toFixed(2);
+  const badge = document.getElementById('edit-type-badge');
+  badge.textContent = tx.type === 'lend' ? 'LENT' : 'PAID';
+  badge.className = 'edit-type-badge ' + (tx.type === 'lend' ? 'tag-lend' : 'tag-pay');
+  document.getElementById('edit-amount-label').textContent =
+    tx.type === 'lend' ? 'Total Borrowed (£)' : 'Amount Repaid (£)';
+  const refField = document.getElementById('edit-ref-field');
+  if (tx.type === 'pay') {
+    refField.style.display = 'block';
+    document.getElementById('edit-ref').value = tx.reference || '';
+  } else {
+    refField.style.display = 'none';
+    document.getElementById('edit-ref').value = '';
+  }
+  document.getElementById('modal-edit').classList.add('open');
+  setTimeout(() => document.getElementById('edit-date').focus(), 50);
+}
+function submitEdit() {
+  const b = getCurrentBorrower();
+  if (!b || editingId === null) return;
+  const tx = b.transactions.find(t => t.id === editingId);
+  if (!tx) return;
+  const date = document.getElementById('edit-date').value.trim();
+  const desc = document.getElementById('edit-desc').value.trim();
+  const amtRaw = document.getElementById('edit-amount').value;
+  if (!validateDate(date)) return alert('Please enter a valid date in dd/mm/yyyy format.');
+  if (!desc) return alert('Please enter a description.');
+  const amount = parseAmount(amtRaw);
+  if (isNaN(amount)) return alert('Please enter a valid amount greater than 0 (e.g. 25.50).');
+  tx.date = date;
+  tx.description = desc;
+  tx.amount = amount;
+  if (tx.type === 'pay') {
+    tx.reference = document.getElementById('edit-ref').value.trim();
+  }
+  saveApp();
+  renderBorrowerDetail();
+  closeModal('edit');
+}
+
+/* ---------- Delete transaction / Clear ---------- */
+function deleteTx(id) {
+  const b = getCurrentBorrower();
+  if (!b) return;
+  if (!confirm('Delete this transaction?')) return;
+  b.transactions = b.transactions.filter(t => t.id !== id);
+  saveApp();
+  renderBorrowerDetail();
+}
+function clearAll() {
+  const b = getCurrentBorrower();
+  if (!b) return;
+  if (!confirm(`Delete ALL ${b.transactions.length} transactions for "${b.name}"?\n\nThe opening amount stays.`)) return;
+  if (!confirm('This cannot be undone. Really delete?')) return;
+  b.transactions = [];
+  saveApp();
+  renderBorrowerDetail();
+}
+
+/* ---------- Excel Export (all borrowers) ---------- */
+function exportExcel() {
+  if (app.borrowers.length === 0) {
+    alert('No borrowers to export yet.');
+    return;
+  }
+  const wb = XLSX.utils.book_new();
+
+  // Summary sheet
+  const summaryRows = app.borrowers.map(b => {
+    const lent = b.transactions.filter(t => t.type === 'lend').reduce((s, t) => s + t.amount, 0);
+    const repaid = b.transactions.filter(t => t.type === 'pay').reduce((s, t) => s + t.amount, 0);
+    return {
+      'Borrower': b.name,
+      'Opening Amount (£)': b.openingAmount || 0,
+      'Extra Lent (£)': lent,
+      'Total Repaid (£)': repaid,
+      'Current Balance Owed (£)': borrowerBalance(b),
+      'Transactions': b.transactions.length
+    };
+  });
+  const wsSummary = XLSX.utils.json_to_sheet(summaryRows);
+  wsSummary['!cols'] = [{wch:24},{wch:18},{wch:16},{wch:16},{wch:24},{wch:14}];
+  const sumRange = XLSX.utils.decode_range(wsSummary['!ref']);
+  for (let R = 1; R <= sumRange.e.r; R++) {
+    [1,2,3,4].forEach(c => {
+      const cell = wsSummary[XLSX.utils.encode_cell({ r: R, c })];
+      if (cell) cell.z = '#,##0.00;[Red]-#,##0.00';
+    });
+  }
+  XLSX.utils.book_append_sheet(wb, wsSummary, 'Summary');
+
+  // One sheet per borrower
+  const usedNames = new Set(['Summary']);
+  app.borrowers.forEach(b => {
+    let base = sheetNameFor(b.name);
+    let name = base;
+    let i = 2;
+    while (usedNames.has(name)) {
+      const suffix = ' (' + i + ')';
+      name = base.slice(0, 31 - suffix.length) + suffix;
+      i++;
+    }
+    usedNames.add(name);
+
+    const sorted = [...b.transactions].sort((x, y) => {
+      const dx = dateToISO(x.date), dy = dateToISO(y.date);
+      if (dx !== dy) return dx < dy ? -1 : 1;
+      return x.id - y.id;
+    });
+
+    let running = b.openingAmount || 0;
+    const rows = sorted.map(t => {
+      running += (t.type === 'lend' ? t.amount : -t.amount);
+      return {
+        'Date': t.date,
+        'Type': t.type === 'lend' ? 'Lent' : 'Payment Received',
+        'Description': t.description,
+        'Reference': (t.type === 'pay' && t.reference) ? t.reference : '',
+        'Amount (£)': t.type === 'lend' ? t.amount : -t.amount,
+        'Balance Owed (£)': running
+      };
+    });
+
+    const ws = rows.length > 0
+      ? XLSX.utils.json_to_sheet(rows)
+      : XLSX.utils.aoa_to_sheet([['Date','Type','Description','Reference','Amount (£)','Balance Owed (£)']]);
+
+    ws['!cols'] = [{wch:12},{wch:18},{wch:30},{wch:22},{wch:14},{wch:18}];
+
+    const lent = b.transactions.filter(t => t.type === 'lend').reduce((s, t) => s + t.amount, 0);
+    const repaid = b.transactions.filter(t => t.type === 'pay').reduce((s, t) => s + t.amount, 0);
+
+    const startRow = (rows.length || 0) + 3;
+    XLSX.utils.sheet_add_aoa(ws, [
+      ['SUMMARY'],
+      ['Opening Amount (£)', b.openingAmount || 0],
+      ['Extra Lent (£)', lent],
+      ['Total Repaid (£)', repaid],
+      ['Current Balance Owed (£)', borrowerBalance(b)],
+      ['Exported On', new Date().toLocaleString('en-GB')]
+    ], { origin: `A${startRow}` });
+
+    const range = XLSX.utils.decode_range(ws['!ref']);
+    for (let R = 1; R <= range.e.r; R++) {
+      const d = ws[XLSX.utils.encode_cell({ r: R, c: 4 })];
+      const e = ws[XLSX.utils.encode_cell({ r: R, c: 5 })];
+      if (d && typeof d.v === 'number') d.z = '#,##0.00;[Red]-#,##0.00';
+      if (e && typeof e.v === 'number') e.z = '#,##0.00;[Red]-#,##0.00';
+    }
+
+    XLSX.utils.book_append_sheet(wb, ws, name);
+  });
+
+  const stamp = new Date().toISOString().slice(0,10);
+  XLSX.writeFile(wb, `Money_Owed_${stamp}.xlsx`);
+}
+
+/* ---------- Excel Import ---------- */
+function openImport() {
+  document.getElementById('modal-import').classList.add('open');
+  document.getElementById('importPreview').innerHTML = '';
+  document.getElementById('importFile').value = '';
+  document.getElementById('importSheetField').style.display = 'none';
+  document.getElementById('confirmImportBtn').disabled = true;
+  pendingImport = null;
+}
+
+document.getElementById('importFile').addEventListener('change', function (e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = function (evt) {
+    try {
+      const data = new Uint8Array(evt.target.result);
+      const wb = XLSX.read(data, { type: 'array', cellDates: true });
+
+      let sheetName = wb.SheetNames[0];
+      const b = getCurrentBorrower();
+      if (b) {
+        const want = sheetNameFor(b.name).toLowerCase();
+        const match = wb.SheetNames.find(n => n.toLowerCase() === want);
+        if (match) sheetName = match;
+      }
+
+      if (wb.SheetNames.length > 1) {
+        document.getElementById('importSheetField').style.display = 'block';
+        document.getElementById('importSheet').value = sheetName;
+      } else {
+        document.getElementById('importSheetField').style.display = 'none';
+      }
+
+      const ws = wb.Sheets[sheetName];
+      const raw = XLSX.utils.sheet_to_json(ws, { defval: '' });
+
+      if (raw.length === 0) {
+        showImportError('The selected sheet appears to be empty.');
+        return;
+      }
+
+      const keys = Object.keys(raw[0]);
+      const find = (...names) => keys.find(k => names.some(n => k.trim().toLowerCase() === n));
+      const dateKey = find('date');
+      const typeKey = find('type');
+      const descKey = find('description', 'desc', 'details');
+      const amtKey = find('amount (£)', 'amount', 'amount (gbp)', 'value');
+      const refKey = find('reference', 'ref', 'bank reference', 'transfer reference');
+
+      if (!dateKey || !descKey || !amtKey) {
+        showImportError(
+          'Could not find the required columns. The sheet needs columns named roughly: ' +
+          'Date, Type, Description, Amount (£). Found: ' + keys.join(', ')
+        );
+        return;
+      }
+
+      const parsed = [];
+      const errors = [];
+      raw.forEach((row, i) => {
+        const firstCell = String(row[dateKey] ?? '').trim();
+        if (firstCell === '' && String(row[descKey] ?? '').trim() === '') return;
+        if (!normaliseDate(row[dateKey]) && !String(row[descKey] ?? '').trim()) return;
+
+        const date = normaliseDate(row[dateKey]);
+        const description = String(row[descKey]).trim();
+        const rawAmtStr = String(row[amtKey]).replace(/[£,\s]/g, '');
+        const signedNum = Number(rawAmtStr);
+        const amount = parseAmount(row[amtKey]);
+
+        if (!date) { errors.push(`Row ${i+2}: bad date "${row[dateKey]}"`); return; }
+        if (isNaN(amount)) { errors.push(`Row ${i+2}: bad amount "${row[amtKey]}"`); return; }
+        if (!description) { errors.push(`Row ${i+2}: empty description`); return; }
+
+        let type;
+        if (isFinite(signedNum) && signedNum < 0) type = 'pay';
+        else {
+          type = normaliseType(row[typeKey]);
+          if (!type) { errors.push(`Row ${i+2}: unknown type "${row[typeKey]}"`); return; }
+        }
+
+        const reference = (type === 'pay' && refKey) ? String(row[refKey] ?? '').trim() : '';
+        parsed.push({ date, type, description, amount, reference });
+      });
+
+      if (parsed.length === 0) {
+        showImportError('No valid rows found. ' + errors.join('; '));
+        return;
+      }
+
+      pendingImport = { rows: parsed };
+      const preview = document.getElementById('importPreview');
+      preview.innerHTML =
+        `<div class="row ok"><strong>${parsed.length}</strong> valid row(s) ready to import into “${escapeHtml(b ? b.name : '')}”.</div>` +
+        (errors.length ? `<div class="row bad">${errors.length} row(s) skipped:<br>${errors.slice(0,5).join('<br>')}${errors.length>5?'<br>…':''}</div>` : '') +
+        parsed.slice(0, 4).map(r => `<div class="row">${r.date} · ${r.type === 'lend' ? 'Lent' : 'Paid'} · ${escapeHtml(r.description)}${r.reference ? ' · Ref: ' + escapeHtml(r.reference) : ''} · ${money(r.amount)}</div>`).join('') +
+        (parsed.length > 4 ? `<div class="row" style="opacity:0.7">…and ${parsed.length - 4} more</div>` : '');
+      document.getElementById('confirmImportBtn').disabled = false;
+
+    } catch (err) {
+      showImportError('Could not read file: ' + err.message);
+    }
+  };
+  reader.readAsArrayBuffer(file);
+});
+
+function showImportError(msg) {
+  pendingImport = null;
+  document.getElementById('importPreview').innerHTML =
+    `<div class="row bad">${escapeHtml(msg)}</div>`;
+  document.getElementById('confirmImportBtn').disabled = true;
+}
+
+function confirmImport() {
+  const b = getCurrentBorrower();
+  if (!pendingImport || !b) return;
+  const mode = document.querySelector('input[name="importMode"]:checked').value;
+
+  let addedCount = 0;
+  let skippedCount = 0;
+
+  if (mode === 'replace') {
+    if (!confirm(`This will REPLACE all current transactions for "${b.name}" with the file contents. Continue?`)) return;
+    b.transactions = pendingImport.rows.map((r, i) => ({
+      id: Date.now() + i,
+      type: r.type,
+      date: r.date,
+      description: r.description,
+      amount: r.amount,
+      reference: r.reference || ''
+    }));
+    addedCount = b.transactions.length;
+  } else {
+    const sig = t => `${t.date}|${t.type}|${t.description}|${t.amount}|${t.reference || ''}`;
+    const existing = new Set(b.transactions.map(sig));
+    pendingImport.rows.forEach((r, i) => {
+      const s = sig(r);
+      if (existing.has(s)) { skippedCount++; return; }
+      existing.add(s);
+      b.transactions.push({
+        id: Date.now() + i + 1,
+        type: r.type,
+        date: r.date,
+        description: r.description,
+        amount: r.amount,
+        reference: r.reference || ''
+      });
+      addedCount++;
+    });
+  }
+
+  saveApp();
+  renderBorrowerDetail();
+  closeModal('import');
+  alert(`Import complete.\nAdded: ${addedCount}${skippedCount ? `\nSkipped (duplicates): ${skippedCount}` : ''}`);
+}
+
+/* ---------- Init ---------- */
+loadApp();
+renderBorrowerList();
+
+document.querySelectorAll('.modal-backdrop').forEach(m => {
+  m.addEventListener('click', e => {
+    if (e.target === m) {
+      const id = m.id.replace('modal-', '');
+      closeModal(id);
+    }
+  });
+});
+document.getElementById('lend-amount').addEventListener('keydown', e => { if (e.key === 'Enter') submitLend(); });
+document.getElementById('pay-amount').addEventListener('keydown', e => { if (e.key === 'Enter') submitPay(); });
+document.getElementById('pay-ref').addEventListener('keydown', e => { if (e.key === 'Enter') submitPay(); });
+document.getElementById('edit-amount').addEventListener('keydown', e => { if (e.key === 'Enter') submitEdit(); });
+document.getElementById('edit-ref').addEventListener('keydown', e => { if (e.key === 'Enter') submitEdit(); });
+document.getElementById('rename-input').addEventListener('keydown', e => { if (e.key === 'Enter') submitRename(); });
+document.getElementById('ab-amount').addEventListener('keydown', e => { if (e.key === 'Enter') submitAddBorrower(); });
+document.getElementById('eb-amount').addEventListener('keydown', e => { if (e.key === 'Enter') submitEditBorrower(); });
+
+window.addEventListener('resize', () => {
+  requestAnimationFrame(() => {
+    document.querySelectorAll('#historyBody td.desc-col').forEach(cell => {
+      const inner = cell.querySelector('.desc-inner');
+      if (!inner) return;
+      if (inner.scrollHeight > inner.clientHeight + 1) {
+        cell.classList.add('truncated');
+        cell.title = inner.textContent;
+      } else {
+        cell.classList.remove('truncated');
+        cell.removeAttribute('title');
+      }
+    });
+  });
+});
+</script>
+</body>
+</html>
